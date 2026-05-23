@@ -1,10 +1,3 @@
-<<<<<<< ours
-<<<<<<< ours
-# riscv-srtdiv
-=======
-=======
->>>>>>> theirs
-# riscv-srtdiv
 
 > 一个面向 FPGA 的 RISC-V RV32M 除法器项目，目标是实现结构清晰、可验证、可复用的 **基 4 SRT 除法核心**。
 
@@ -263,10 +256,5 @@ riscv-srtdiv/
 - **便于观察**：保留除 0、溢出、busy、valid 等调试信息。
 - **适合 FPGA**：避免过深组合路径，优先保证可综合、可收敛、可验证。
 
-## License
 
-本项目建议使用 MIT License 或 Apache License 2.0。若后续引入第三方代码或参考实现，应在对应文件中保留原始版权和许可证说明。
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
+
