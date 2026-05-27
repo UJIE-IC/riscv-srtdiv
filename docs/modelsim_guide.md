@@ -175,6 +175,12 @@ quit -f                  仿真结束后退出
 powershell -ExecutionPolicy Bypass -File scripts/run_modelsim.ps1
 ```
 
+也可以使用统一入口：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/msim.ps1 run
+```
+
 脚本内部做的事情是：
 
 ```powershell
@@ -192,6 +198,58 @@ vsim -c work.tb_rv32m_srt_divider -do sim/run_modelsim.do
 ```text
 PASS 2014 tests
 ```
+
+## 5.1 推荐的自动化方式
+
+在这个 Windows + ModelSim 工程里，推荐优先使用 PowerShell 脚本，而不是 Makefile。
+
+原因很简单：
+
+```text
+1. ModelSim 是 Windows 安装的软件，PowerShell 调用 vlib/vlog/vsim 最直接
+2. 不需要额外安装 make、MSYS2、Git Bash 或 WSL
+3. 路径规则更接近 Windows 本身
+4. 后续可以很容易扩展成 compile/run/gui/clean 等任务
+```
+
+本工程提供统一脚本：
+
+```text
+scripts/msim.ps1
+```
+
+常用模式：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/msim.ps1 run
+powershell -ExecutionPolicy Bypass -File scripts/msim.ps1 gui
+powershell -ExecutionPolicy Bypass -File scripts/msim.ps1 compile
+powershell -ExecutionPolicy Bypass -File scripts/msim.ps1 clean
+```
+
+含义：
+
+```text
+run       清理旧 work，重新编译，命令行运行 testbench
+gui       清理旧 work，重新编译，打开 ModelSim GUI，并自动添加波形
+compile   只清理并重新编译，不运行仿真
+clean     删除 ModelSim 生成物
+```
+
+`run` 模式会在命令行里显示 testbench 打印的信息，例如：
+
+```text
+PASS 2014 tests
+```
+
+`gui` 模式会打开 ModelSim 图形界面，`wave_modelsim.do` 会自动执行：
+
+```tcl
+add wave -r /*
+run -all
+```
+
+所以 GUI 的 Transcript 窗口里也能看到 testbench 的 `$display` 输出，也就是同样可以看到 `PASS 2014 tests`。
 
 ## 6. GUI 怎么用
 
@@ -309,4 +367,3 @@ run -all
 ```powershell
 vsim work.tb_rv32m_srt_divider -do sim/wave_modelsim.do
 ```
-

@@ -22,6 +22,12 @@ module tb_rv32m_srt_divider;
 
     int unsigned test_count;
     int unsigned error_count;
+    logic [3:0] op_cov;
+    logic [3:0] signed_div_sign_cov;
+    logic [3:0] signed_rem_sign_cov;
+    logic [3:0] unsigned_relation_cov;
+    logic [3:0] signed_relation_cov;
+    logic [3:0] special_cov;
 
     rv32m_srt_divider_top u_dut (
         .clk_i(clk),
@@ -52,6 +58,117 @@ module tb_rv32m_srt_divider;
             abs32 = value;
         end
     endfunction
+
+    function automatic int signed msb_pos(input logic [31:0] value);
+        msb_pos = -1;
+
+        for (int i = 31; i >= 0; i--) begin
+            if ((msb_pos < 0) && value[i]) begin
+                msb_pos = i;
+            end
+        end
+    endfunction
+
+    function automatic int unsigned relation_bin(
+        input logic [31:0] dividend,
+        input logic [31:0] divisor
+    );
+        int signed dividend_msb;
+        int signed divisor_msb;
+
+        dividend_msb = msb_pos(dividend);
+        divisor_msb = msb_pos(divisor);
+
+        if (dividend == divisor) begin
+            relation_bin = 2;
+        end else if (dividend > divisor) begin
+            relation_bin = 3;
+        end else if (dividend_msb < divisor_msb) begin
+            relation_bin = 0;
+        end else begin
+            relation_bin = 1;
+        end
+    endfunction
+
+    task automatic update_coverage(
+        input logic [1:0] op,
+        input logic [31:0] rs1,
+        input logic [31:0] rs2,
+        input logic div_by_zero,
+        input logic overflow
+    );
+        logic is_signed;
+        logic is_rem;
+        logic [31:0] a_mag;
+        logic [31:0] b_mag;
+        int unsigned sign_idx;
+        int unsigned rel_idx;
+
+        is_signed = (op == OP_DIV) || (op == OP_REM);
+        is_rem = (op == OP_REM) || (op == OP_REMU);
+        op_cov[op] = 1'b1;
+
+        if (div_by_zero) begin
+            special_cov[is_rem ? 1 : 0] = 1'b1;
+        end else if (overflow) begin
+            special_cov[is_rem ? 3 : 2] = 1'b1;
+        end else if (is_signed) begin
+            sign_idx = {rs1[31], rs2[31]};
+            a_mag = rs1[31] ? abs32(rs1) : rs1;
+            b_mag = rs2[31] ? abs32(rs2) : rs2;
+            rel_idx = relation_bin(a_mag, b_mag);
+            signed_relation_cov[rel_idx] = 1'b1;
+
+            if (op == OP_DIV) begin
+                signed_div_sign_cov[sign_idx] = 1'b1;
+            end else begin
+                signed_rem_sign_cov[sign_idx] = 1'b1;
+            end
+        end else begin
+            rel_idx = relation_bin(rs1, rs2);
+            unsigned_relation_cov[rel_idx] = 1'b1;
+        end
+    endtask
+
+    task automatic check_coverage();
+        if (op_cov !== 4'b1111) begin
+            error_count++;
+            $display("COVER FAIL op_cov=%b expected=1111", op_cov);
+        end
+
+        if (signed_div_sign_cov !== 4'b1111) begin
+            error_count++;
+            $display("COVER FAIL signed_div_sign_cov=%b expected=1111", signed_div_sign_cov);
+        end
+
+        if (signed_rem_sign_cov !== 4'b1111) begin
+            error_count++;
+            $display("COVER FAIL signed_rem_sign_cov=%b expected=1111", signed_rem_sign_cov);
+        end
+
+        if (unsigned_relation_cov !== 4'b1111) begin
+            error_count++;
+            $display("COVER FAIL unsigned_relation_cov=%b expected=1111", unsigned_relation_cov);
+        end
+
+        if (signed_relation_cov !== 4'b1111) begin
+            error_count++;
+            $display("COVER FAIL signed_relation_cov=%b expected=1111", signed_relation_cov);
+        end
+
+        if (special_cov !== 4'b1111) begin
+            error_count++;
+            $display("COVER FAIL special_cov=%b expected=1111", special_cov);
+        end
+
+        $display("COVER op=%b signed_div_sign=%b signed_rem_sign=%b unsigned_relation=%b signed_relation=%b special=%b",
+            op_cov,
+            signed_div_sign_cov,
+            signed_rem_sign_cov,
+            unsigned_relation_cov,
+            signed_relation_cov,
+            special_cov);
+    endtask
 
     task automatic calc_ref(
         input logic [1:0] op,
@@ -131,6 +248,7 @@ module tb_rv32m_srt_divider;
         end
 
         test_count++;
+        update_coverage(op, rs1, rs2, expected_div_by_zero, expected_overflow);
 
         if ((rsp_result !== expected_result)
                 || (rsp_div_by_zero !== expected_div_by_zero)
@@ -161,6 +279,12 @@ module tb_rv32m_srt_divider;
         rsp_ready = 1'b1;
         test_count = 0;
         error_count = 0;
+        op_cov = 4'b0000;
+        signed_div_sign_cov = 4'b0000;
+        signed_rem_sign_cov = 4'b0000;
+        unsigned_relation_cov = 4'b0000;
+        signed_relation_cov = 4'b0000;
+        special_cov = 4'b0000;
 
         repeat (5) @(posedge clk);
         rst_n = 1'b1;
@@ -168,10 +292,20 @@ module tb_rv32m_srt_divider;
 
         run_one(OP_DIVU, 32'd100, 32'd3);
         run_one(OP_REMU, 32'd100, 32'd3);
+        run_one(OP_DIVU, 32'd10, 32'd10);
+        run_one(OP_REMU, 32'd10, 32'd10);
         run_one(OP_DIV, 32'hffff_fff6, 32'd3);
         run_one(OP_REM, 32'hffff_fff6, 32'd3);
+        run_one(OP_DIV, 32'd10, 32'd3);
+        run_one(OP_REM, 32'd10, 32'd3);
         run_one(OP_DIV, 32'd10, 32'hffff_fffa);
         run_one(OP_REM, 32'd10, 32'hffff_fffa);
+        run_one(OP_DIV, 32'hffff_fff6, 32'hffff_fffd);
+        run_one(OP_REM, 32'hffff_fff6, 32'hffff_fffd);
+        run_one(OP_DIV, 32'd5, 32'd10);
+        run_one(OP_REM, 32'hffff_fffb, 32'd10);
+        run_one(OP_DIV, 32'hffff_fff9, 32'd7);
+        run_one(OP_REM, 32'hffff_fff9, 32'd7);
         run_one(OP_DIV, 32'h8000_0000, 32'hffff_ffff);
         run_one(OP_REM, 32'h8000_0000, 32'hffff_ffff);
         run_one(OP_DIVU, 32'hffff_ffff, 32'd1);
@@ -180,10 +314,18 @@ module tb_rv32m_srt_divider;
         run_one(OP_REM, 32'hffff_1234, 32'd0);
         run_one(OP_DIVU, 32'd5, 32'd10);
         run_one(OP_REMU, 32'd5, 32'd10);
+        run_one(OP_DIVU, 32'd5, 32'd6);
+        run_one(OP_REMU, 32'd5, 32'd6);
+        run_one(OP_DIV, 32'hffff_fffb, 32'd6);
+        run_one(OP_REM, 32'hffff_fffb, 32'd6);
+        run_one(OP_DIV, 32'd5, 32'hffff_fffa);
+        run_one(OP_REM, 32'd5, 32'hffff_fffa);
 
         for (int i = 0; i < 2000; i++) begin
             run_one($urandom_range(0, 3), $urandom, $urandom);
         end
+
+        check_coverage();
 
         if (error_count == 0) begin
             $display("PASS %0d tests", test_count);

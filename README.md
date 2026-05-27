@@ -229,13 +229,13 @@ rtl/
 |-- rv32m_srt_lzc.sv              # leading-zero / leading-one 位置计算
 |-- rv32m_srt_qds_radix4.sv       # Unified radix-4 quotient digit selection
 |-- rv32m_srt_otf.sv              # on-the-fly quotient conversion
-|-- rv32m_srt_postprocess.sv      # 商修正与余数生成
-`-- rv32m_srt_csa.sv              # CSA 基础模块，预留给后续冗余余数优化
+|-- rv32m_srt_postprocess.sv      # 基于最终 residual 的商修正与余数恢复
+`-- rv32m_srt_csa.sv              # CSA 基础模块，用于保存 carry-save partial remainder
 ```
 
 顶层只关心 RV32M 指令语义和外部协议。真正的 SRT 细节放在 `rv32m_srt_core.sv` 内部，后续可以替换成 radix-8/radix-16 或流水线版本，而不改变外部接口。
 
-第一版 core 使用 radix-4 SRT recurrence 和论文 Table VI 选商表生成商 digit，并用 OTF 转换得到二进制商。为了先让 RV32M 结果闭环，最终余数由 `quotient * divisor` 回代生成；如果 OTF 商因为截断边界偏大 1，`rv32m_srt_postprocess.sv` 会先把商减 1 再计算余数。后续可以继续把余数直接从 SRT residual 中恢复，减少后处理乘法路径。
+第一版 core 使用 radix-4 SRT recurrence 和论文 Table VI 选商表生成商 digit，并用 OTF 转换得到二进制商。partial remainder 在迭代中以 `WS/WC` 两路 carry-save 形式保存；最终后处理先把 `WS + WC` 压缩成普通二进制 residual，再根据 residual 符号选择 `Q/QM`，并通过条件加回 normalized divisor、右移反归一化来恢复余数。后处理不再使用 `quotient * divisor` 回代，因此不会在结果路径上引入乘法器。
 
 ## 仿真
 
@@ -258,6 +258,13 @@ docs/
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/run_modelsim.ps1
+```
+
+或者使用统一任务脚本：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/msim.ps1 run
+powershell -ExecutionPolicy Bypass -File scripts/msim.ps1 gui
 ```
 
 脚本执行：
@@ -342,4 +349,4 @@ DISPATCH
 
 ## 当前状态
 
-当前仓库已经形成第一版可仿真的 RV32M radix-4 SRT divider。ModelSim 下可通过 `vlib`、`vlog` 和 `vsim` 完成编译与仿真，基础 testbench 输出 `PASS 2014 tests`。下一步建议重点优化两件事：一是把后处理乘法余数生成替换成直接 residual 恢复，二是把 `rv32m_srt_csa.sv` 接入迭代路径，真正保持 carry-save partial remainder。
+当前仓库已经形成第一版可仿真的 RV32M radix-4 SRT divider。ModelSim 下可通过 `vlib`、`vlog` 和 `vsim` 完成编译与仿真，基础 testbench 输出 `PASS 2014 tests`。当前 RTL 已经把 `rv32m_srt_csa.sv` 接入迭代路径，并且后处理已经改为直接从 SRT residual 恢复余数，不再使用乘法回代。下一步建议重点做 FPGA 综合资源与时序评估，并继续扩大随机测试规模。

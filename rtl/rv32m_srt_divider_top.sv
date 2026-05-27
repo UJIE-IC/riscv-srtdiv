@@ -50,7 +50,6 @@ module rv32m_srt_divider_top (
     logic remainder_neg_q;
     logic div_by_zero_q;
     logic overflow_q;
-    logic less_than_divisor_q;
 
     logic [31:0] result_q;
     logic [31:0] result_d;
@@ -70,10 +69,8 @@ module rv32m_srt_divider_top (
     logic [31:0] req_rs2_mag;
     logic req_div_by_zero;
     logic req_overflow;
-    logic req_less_than_divisor;
 
     logic [31:0] special_result;
-    logic [31:0] early_result;
 
     logic core_start;
     logic core_done;
@@ -110,9 +107,6 @@ module rv32m_srt_divider_top (
         && (req_rs1_i == 32'h8000_0000)
         && (req_rs2_i == 32'hffff_ffff);
 
-    // 被除数幅值小于除数幅值时，商为 0，余数为原被除数，可提前返回。
-    assign req_less_than_divisor = !req_div_by_zero && (req_rs1_mag < req_rs2_mag);
-
     always_comb begin
         special_result = 32'h0000_0000;
 
@@ -120,14 +114,6 @@ module rv32m_srt_divider_top (
             special_result = result_is_rem_q ? rs1_q : 32'hffff_ffff;
         end else if (overflow_q) begin
             special_result = result_is_rem_q ? 32'h0000_0000 : 32'h8000_0000;
-        end
-    end
-
-    always_comb begin
-        early_result = 32'h0000_0000;
-
-        if (less_than_divisor_q) begin
-            early_result = result_is_rem_q ? rs1_q : 32'h0000_0000;
         end
     end
 
@@ -177,11 +163,6 @@ module rv32m_srt_divider_top (
                         result_div_by_zero_d = div_by_zero_q;
                         result_overflow_d = overflow_q;
                         state_d = ST_OUTPUT;
-                    end else if (less_than_divisor_q) begin
-                        result_d = early_result;
-                        result_div_by_zero_d = 1'b0;
-                        result_overflow_d = 1'b0;
-                        state_d = ST_OUTPUT;
                     end else begin
                         core_start = 1'b1;
                         state_d = ST_WAIT_CORE;
@@ -221,7 +202,6 @@ module rv32m_srt_divider_top (
             remainder_neg_q <= 1'b0;
             div_by_zero_q <= 1'b0;
             overflow_q <= 1'b0;
-            less_than_divisor_q <= 1'b0;
             result_q <= 32'h0000_0000;
             result_div_by_zero_q <= 1'b0;
             result_overflow_q <= 1'b0;
@@ -245,7 +225,6 @@ module rv32m_srt_divider_top (
                 remainder_neg_q <= req_rs1_neg;
                 div_by_zero_q <= req_div_by_zero;
                 overflow_q <= req_overflow;
-                less_than_divisor_q <= req_less_than_divisor;
             end
         end
     end

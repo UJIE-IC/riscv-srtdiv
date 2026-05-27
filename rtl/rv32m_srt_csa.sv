@@ -1,11 +1,11 @@
 module rv32m_srt_csa #(
-    parameter int WIDTH = 40
+    parameter int WIDTH = 35
 ) (
-    input logic [WIDTH-1:0] a_i,
-    input logic [WIDTH-1:0] b_i,
-    input logic [WIDTH-1:0] c_i,
-    output logic [WIDTH-1:0] sum_o,
-    output logic [WIDTH-1:0] carry_o
+    input logic signed [WIDTH-1:0] a_i,
+    input logic signed [WIDTH-1:0] b_i,
+    input logic signed [WIDTH-1:0] c_i,
+    output logic signed [WIDTH-1:0] sum_o,
+    output logic signed [WIDTH-1:0] carry_o
 );
 
     assign sum_o = a_i ^ b_i ^ c_i;
