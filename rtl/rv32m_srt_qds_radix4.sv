@@ -24,10 +24,10 @@ module rv32m_srt_qds_radix4 #(
     logic signed [QDS_WIDTH-1:0] m0;
     logic signed [QDS_WIDTH-1:0] m_n1;
 
-    // divisor_norm_i 是 U1.31，最高位 bit31 恒为 1。
+    // divisor_norm_i 是 U1.31，最高位恒为 1
     assign divisor_index = divisor_norm_i[30:28];
 
-    // rem_sum_i/rem_carry_i 是 Q4.31 的 carry-save residual。
+    // rem_sum_i/rem_carry_i 是 Q4.31 的 carry-save residual
     assign rem_sum_hi_q4_4 = rem_sum_i[REM_WIDTH-1:RESIDUAL_HI_LSB];
     assign rem_carry_hi_q4_4 = rem_carry_i[REM_WIDTH-1:RESIDUAL_HI_LSB];
     assign rem_hi_sum_q5_4 = rem_sum_hi_q4_4 + rem_carry_hi_q4_4;

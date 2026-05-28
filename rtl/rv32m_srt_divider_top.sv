@@ -2,23 +2,18 @@ module rv32m_srt_divider_top (
     input logic clk_i,
     input logic rst_ni,
 
-    // 取消当前在途请求。后续接入 CPU 流水线时，分支恢复、异常恢复
-    // 或全局 flush 都可以通过这个信号杀掉当前除法操作。
     input logic flush_i,
 
-    // 请求通道：req_valid_i && req_ready_o 为 1 时接收一条新请求。
     input logic req_valid_i,
     output logic req_ready_o,
     input logic [1:0] req_op_i,
     input logic [31:0] req_rs1_i,
     input logic [31:0] req_rs2_i,
 
-    // 响应通道：rsp_valid_o && rsp_ready_i 为 1 时结果被下游接收。
     output logic rsp_valid_o,
     input logic rsp_ready_i,
     output logic [31:0] rsp_result_o,
 
-    // 仅作为调试/验证状态。RV32M 的除 0 和有符号溢出不会触发 trap。
     output logic rsp_div_by_zero_o,
     output logic rsp_overflow_o,
 
@@ -31,7 +26,6 @@ module rv32m_srt_divider_top (
     localparam logic [1:0] OP_REM = 2'b10;
     localparam logic [1:0] OP_REMU = 2'b11;
 
-    // 顶层只做请求分发、特殊情况处理和结果返回；SRT 细节放在 core 中。
     typedef enum logic [1:0] {
         ST_IDLE,
         ST_DISPATCH,
@@ -92,7 +86,6 @@ module rv32m_srt_divider_top (
     assign req_fire = req_valid_i && req_ready_o;
     assign rsp_fire = rsp_valid_o && rsp_ready_i;
 
-    // 有符号指令先取绝对值，core 只处理无符号幅值。
     assign req_is_signed = (req_op_i == OP_DIV) || (req_op_i == OP_REM);
     assign req_is_rem = (req_op_i == OP_REM) || (req_op_i == OP_REMU);
     assign req_rs1_neg = req_is_signed && req_rs1_i[31];
@@ -101,7 +94,7 @@ module rv32m_srt_divider_top (
     assign req_rs1_mag = req_rs1_neg ? (~req_rs1_i + 32'd1) : req_rs1_i;
     assign req_rs2_mag = req_rs2_neg ? (~req_rs2_i + 32'd1) : req_rs2_i;
 
-    // RV32M 对除 0 和 signed overflow 规定了固定返回值，不进入 SRT 迭代。
+    // 除 0 和 signed overflow 
     assign req_div_by_zero = (req_rs2_i == 32'h0000_0000);
     assign req_overflow = req_is_signed
         && (req_rs1_i == 32'h8000_0000)
@@ -117,17 +110,12 @@ module rv32m_srt_divider_top (
         end
     end
 
-    // core 输出的是正数商/余数幅值，顶层根据 RV32M 指令语义恢复符号。
+    // 符号恢复
     assign signed_quotient = quotient_neg_q ? (~core_quotient_mag + 32'd1) : core_quotient_mag;
     assign signed_remainder = remainder_neg_q ? (~core_remainder_mag + 32'd1) : core_remainder_mag;
     assign normal_result = result_is_rem_q ? signed_remainder : signed_quotient;
 
-    // SRT core 只接收正数幅值。core 内部负责：
-    // 1. 对被除数和除数做归一化；
-    // 2. 计算 q_bits = msb(dividend) - msb(divisor) + 1；
-    // 3. 使用论文 Table VI 的 radix-4 选商表产生 q in {-2,-1,0,+1,+2}；
-    // 4. 使用 on-the-fly conversion 更新 Q/QM；
-    // 5. 当 q_bits 为奇数时，用 q4 -> q1 规则折叠最后 1 个商位。
+    // SRT core 做无符号数除法
     rv32m_srt_core u_core (
         .clk_i(clk_i),
         .rst_ni(rst_ni),

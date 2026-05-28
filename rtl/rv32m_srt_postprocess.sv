@@ -1,9 +1,9 @@
 module rv32m_srt_postprocess #(
     parameter int REM_WIDTH = 35,
-    parameter int OTF_WIDTH = 36
+    parameter int OTF_WIDTH = 33
 ) (
-    input logic signed [REM_WIDTH-1:0] rem_sum_i,
-    input logic signed [REM_WIDTH-1:0] rem_carry_i,
+    input logic signed [REM_WIDTH-1:0] residual_i,
+    input logic residual_negative_i,
     input logic signed [REM_WIDTH-1:0] divisor_norm_i,
     input logic [OTF_WIDTH-1:0] q_otf_i,
     input logic [OTF_WIDTH-1:0] qm_otf_i,
@@ -13,50 +13,35 @@ module rv32m_srt_postprocess #(
     output logic [31:0] remainder_o
 );
 
-    localparam int POST_WIDTH = REM_WIDTH + 3;
-
-    logic signed [POST_WIDTH-1:0] residual_sum;
-    logic signed [POST_WIDTH-1:0] divisor_norm_ext;
-    logic signed [POST_WIDTH-1:0] correction_addend;
-    logic signed [POST_WIDTH-1:0] remainder_norm;
-    logic signed [POST_WIDTH-1:0] remainder_shifted;
-    logic signed [REM_WIDTH-1:0] residual_compact;
-    logic [OTF_WIDTH-1:0] quotient_scaled;
+    logic signed [REM_WIDTH-1:0] restore_addend;
+    logic signed [REM_WIDTH-1:0] remainder_restored;
+    logic signed [REM_WIDTH-1:0] remainder_aligned;
+    logic signed [REM_WIDTH-1:0] remainder_shifted;
+    logic [OTF_WIDTH-1:0] quotient_selected;
     logic [OTF_WIDTH-1:0] quotient_full;
-    logic [OTF_WIDTH-1:0] quotient_back_scaled;
-    logic [OTF_WIDTH-1:0] correction_units;
 
-    assign residual_compact = rem_sum_i + rem_carry_i;
-    assign residual_sum = {{3{residual_compact[REM_WIDTH-1]}}, residual_compact};
-    assign divisor_norm_ext = {{3{divisor_norm_i[REM_WIDTH-1]}}, divisor_norm_i};
-
-    assign quotient_scaled = residual_sum[POST_WIDTH-1] ? qm_otf_i : q_otf_i;
-    assign quotient_full = shift_down_i ? (quotient_scaled >> 1) : quotient_scaled;
-    assign quotient_back_scaled = shift_down_i ? (quotient_full << 1) : quotient_full;
-    assign correction_units = q_otf_i - quotient_back_scaled;
-
+    // residual 为负时选择 Q-1，并按 e 奇偶加回 D 或 2D。
+    assign quotient_selected = residual_negative_i ? qm_otf_i : q_otf_i;
+    assign quotient_full = shift_down_i ? (quotient_selected >> 1) : quotient_selected;
     always_comb begin
-        unique case (correction_units[1:0])
-            2'd0: begin
-                correction_addend = '0;
+        unique case ({residual_negative_i, shift_down_i})
+            2'b10: begin
+                restore_addend = divisor_norm_i;
             end
 
-            2'd1: begin
-                correction_addend = divisor_norm_ext << 2;
-            end
-
-            2'd2: begin
-                correction_addend = divisor_norm_ext << 3;
+            2'b11: begin
+                restore_addend = divisor_norm_i << 1;
             end
 
             default: begin
-                correction_addend = '0;
+                restore_addend = '0;
             end
         endcase
     end
 
-    assign remainder_norm = residual_sum + correction_addend;
-    assign remainder_shifted = remainder_norm >>> remainder_shift_i;
+    assign remainder_restored = residual_i + restore_addend;
+    assign remainder_aligned = shift_down_i ? (remainder_restored >>> 1) : remainder_restored;
+    assign remainder_shifted = remainder_aligned >>> remainder_shift_i;
 
     assign quotient_o = quotient_full[31:0];
     assign remainder_o = remainder_shifted[31:0];
