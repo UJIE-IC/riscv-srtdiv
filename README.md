@@ -275,7 +275,7 @@ e = lzc(B) - lzc(A) = msb(A) - msb(B)
 当前实现的 radix-4 迭代次数为：
 
 ```text
-iter = floor((e + 1) / 2) + 1
+iter = ceil(e / 2) + 1
 ```
 
 等价写法：
@@ -296,7 +296,7 @@ e = 2k + 1 -> iter = k + 2
 RV32 最坏情况下 `e = 31`：
 
 ```text
-iter = floor((31 + 1) / 2) + 1 = 17
+iter = ceil(31 / 2) + 1 = 17
 normal latency = 17 + 4 = 21 cycles
 ```
 
